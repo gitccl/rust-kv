@@ -9,3 +9,10 @@ edition = "2021"
 clap = { version = "4.0.29"}
 serde = { version = "1.0.140", features = ["derive"] }
 serde_json = "1.0.82"
+failure = "0.1.8"
+
+[dev-dependencies]
+assert_cmd = "2.0.7"
+predicates = "2.1.4"
+tempfile = "3.3.0"
+walkdir = "2.3.2"

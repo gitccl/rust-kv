@@ -1,9 +1,9 @@
-use std::env::current_dir;
+use std::{env::current_dir, process::exit};
 
 use clap::{arg, Command};
-use rust_kv::KvStore;
+use rust_kv::{KvStore, Result, KvError};
 
-fn main() {
+fn main() -> Result<()> {
     let matches = Command::new(env!("CARGO_PKG_NAME"))
         .version(env!("CARGO_PKG_VERSION"))
         .author(env!("CARGO_PKG_AUTHORS"))
@@ -28,23 +28,37 @@ fn main() {
         )
         .get_matches();
 
-    let mut kv = KvStore::open(current_dir().unwrap());
+    let mut kv = KvStore::open(current_dir()?)?;
 
     match matches.subcommand() {
         Some(("set", sub_matches)) => {
             let key = sub_matches.get_one::<String>("key").unwrap().clone();
             let value = sub_matches.get_one::<String>("value").unwrap().clone();
-            kv.set(key, value);
+            kv.set(key, value)?;
         }
         Some(("get", sub_matches)) => {
             let key = sub_matches.get_one::<String>("key").unwrap().clone();
-            let value = kv.get(key);
-            print!("{:?}", value);
+            let value = kv.get(key)?;
+            if let Some(value) = value {
+                println!("{}", value);
+            } else {
+                println!("Key not found");
+            }
         }
         Some(("rm", sub_matches)) => {
             let key = sub_matches.get_one::<String>("key").unwrap().clone();
-            kv.remove(key);
+            match kv.remove(key) {
+                Ok(()) => {},
+                Err(KvError::KeyNotFound) => {
+                    println!("Key not found");
+                    exit(1);
+                },
+                Err(e) => {
+                    return Err(e)
+                }
+            }
         }
         _ => unreachable!(),
     }
+    Ok(())
 }
