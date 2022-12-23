@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, string};
 
 use failure::Fail;
 
@@ -28,6 +28,14 @@ pub enum KvError {
     /// Error with a string message
     #[fail(display = "{}", _0)]
     StringError(String),
+
+    /// Sled store error.
+    #[fail(display = "{}", _0)]
+    Sled(#[cause] sled::Error),
+
+    /// Key or value is invalid UTF-8 sequence
+    #[fail(display = "{}", _0)]
+    Utf8(#[cause] string::FromUtf8Error),
 }
 
 impl From<io::Error> for KvError {
@@ -39,5 +47,17 @@ impl From<io::Error> for KvError {
 impl From<serde_json::Error> for KvError {
     fn from(error: serde_json::Error) -> Self {
         KvError::Serde(error)
+    }
+}
+
+impl From<sled::Error> for KvError {
+    fn from(error: sled::Error) -> Self {
+        KvError::Sled(error)
+    }
+}
+
+impl From<string::FromUtf8Error> for KvError {
+    fn from(error: string::FromUtf8Error) -> Self {
+        KvError::Utf8(error)
     }
 }

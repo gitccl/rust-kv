@@ -1,4 +1,4 @@
-use rust_kv::{Result, KvStore, KvEngine};
+use rust_kv::{KvEngine, KvStore, Result};
 use tempfile::TempDir;
 use walkdir::WalkDir;
 

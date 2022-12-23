@@ -8,8 +8,8 @@ use std::{
 };
 
 use clap::{Parser, ValueEnum};
-use log::{error, LevelFilter, info};
-use rust_kv::{KvEngine, KvStore, Request, Response, Result};
+use log::{error, info, LevelFilter};
+use rust_kv::{KvEngine, KvStore, Request, Response, Result, SledStore};
 use serde_json::Deserializer;
 
 const DEFAULT_LISTENING_ADDRESS: &str = "127.0.0.1:4000";
@@ -44,6 +44,7 @@ fn run(engine: Engine, addr: String) -> Result<()> {
 
     match engine {
         Engine::Kvs => run_server(KvStore::open(current_dir()?)?, addr),
+        Engine::Sled => run_server(SledStore::open(current_dir()?)?, addr),
     }
 }
 
@@ -61,6 +62,8 @@ fn current_engine() -> Result<Option<Engine>> {
     let engine_str = fs::read_to_string(engine_path)?;
     if engine_str == format!("{}", Engine::Kvs) {
         return Ok(Some(Engine::Kvs));
+    } else if engine_str == format!("{}", Engine::Sled) {
+        return Ok(Some(Engine::Sled));
     }
     Ok(None)
 }
@@ -80,12 +83,14 @@ struct Arg {
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
 enum Engine {
     Kvs,
+    Sled,
 }
 
 impl Display for Engine {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Engine::Kvs => write!(f, "kvs"),
+            Engine::Sled => write!(f, "sled"),
         }
     }
 }
@@ -110,7 +115,7 @@ impl<E: KvEngine> KvServer<E> {
                     if let Err(err) = self.handle_request(stream) {
                         error!("handle request error: {}", err);
                     }
-                },
+                }
                 Err(err) => error!("connect error: {}", err),
             };
         }
@@ -120,7 +125,7 @@ impl<E: KvEngine> KvServer<E> {
     fn handle_request(&mut self, stream: TcpStream) -> Result<()> {
         let client_addr = stream.peer_addr()?;
         info!("handle request from {}", client_addr);
-        
+
         let mut writer = BufWriter::new(&stream);
         let req_reader = Deserializer::from_reader(&stream).into_iter::<Request>();
         for request in req_reader {
