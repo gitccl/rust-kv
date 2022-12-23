@@ -1,7 +1,7 @@
 use std::{env::current_dir, process::exit};
 
 use clap::{arg, Command};
-use rust_kv::{KvStore, Result, KvError};
+use rust_kv::{KvEngine, KvError, KvStore, Result};
 
 fn main() -> Result<()> {
     let matches = Command::new(env!("CARGO_PKG_NAME"))
@@ -48,14 +48,12 @@ fn main() -> Result<()> {
         Some(("rm", sub_matches)) => {
             let key = sub_matches.get_one::<String>("key").unwrap().clone();
             match kv.remove(key) {
-                Ok(()) => {},
+                Ok(()) => {}
                 Err(KvError::KeyNotFound) => {
                     println!("Key not found");
                     exit(1);
-                },
-                Err(e) => {
-                    return Err(e)
                 }
+                Err(e) => return Err(e),
             }
         }
         _ => unreachable!(),

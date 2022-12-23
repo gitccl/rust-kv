@@ -8,7 +8,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::{KvError, Result};
+use crate::{KvEngine, KvError, Result};
 
 const COMPACTION_THRESHOLD: u64 = 1024 * 1024;
 
@@ -54,72 +54,6 @@ impl KvStore {
             current_file_id,
             uncompacted,
         })
-    }
-
-    /// Gets the string value of a given string key.
-    ///
-    /// Returns `None` if the given key does not exist.
-    pub fn get(&mut self, key: String) -> Result<Option<String>> {
-        if let Some(record) = self.index.get(&key) {
-            let buf_reader = self.readers.get_mut(&record.file_id).unwrap();
-            buf_reader.seek(SeekFrom::Start(record.offset))?;
-            let reader = buf_reader.take(record.length);
-            // the command in the log must be a Set cmd, otherwise the log is corrupted
-            if let Command::Set(_, value) = serde_json::from_reader(reader)? {
-                Ok(Some(value))
-            } else {
-                Err(KvError::UnexpectedCommandType)
-            }
-        } else {
-            Ok(None)
-        }
-    }
-
-    /// Sets the value of a string key to a string.
-    ///
-    /// If the key already exists, the previous value will be overwritten.
-    pub fn set(&mut self, key: String, value: String) -> Result<()> {
-        let cmd = Command::Set(key, value);
-        let offset = self.current_writer.get_offset();
-        serde_json::to_writer(&mut self.current_writer, &cmd)?;
-        self.current_writer.flush()?;
-        let record = RecordInfo {
-            file_id: self.current_file_id,
-            offset,
-            length: self.current_writer.get_offset() - offset,
-        };
-        if let Command::Set(key, _) = cmd {
-            self.uncompacted += self
-                .index
-                .insert(key, record)
-                .map(|record| record.length)
-                .unwrap_or(0);
-        }
-
-        if self.uncompacted >= COMPACTION_THRESHOLD {
-            self.compact()?;
-        }
-        Ok(())
-    }
-
-    /// Removes a given key.
-    pub fn remove(&mut self, key: String) -> Result<()> {
-        if self.index.contains_key(&key) {
-            let old_record = self.index.remove(&key).expect("key not found");
-            let cmd = Command::Remove(key);
-            let offset = self.current_writer.get_offset();
-            serde_json::to_writer(&mut self.current_writer, &cmd)?;
-            self.current_writer.flush()?;
-            self.uncompacted += self.current_writer.get_offset() - offset;
-            self.uncompacted += old_record.length;
-
-            if self.uncompacted >= COMPACTION_THRESHOLD {
-                self.compact()?;
-            }
-            Ok(())
-        } else {
-            Err(KvError::KeyNotFound)
-        }
     }
 
     /// Clears stale entries in the log.
@@ -232,6 +166,74 @@ impl KvStore {
         }
 
         Ok((*file_ids.last().unwrap_or(&0), uncompacted))
+    }
+}
+
+impl KvEngine for KvStore {
+    /// Gets the string value of a given string key.
+    ///
+    /// Returns `None` if the given key does not exist.
+    fn get(&mut self, key: String) -> Result<Option<String>> {
+        if let Some(record) = self.index.get(&key) {
+            let buf_reader = self.readers.get_mut(&record.file_id).unwrap();
+            buf_reader.seek(SeekFrom::Start(record.offset))?;
+            let reader = buf_reader.take(record.length);
+            // the command in the log must be a Set cmd, otherwise the log is corrupted
+            if let Command::Set(_, value) = serde_json::from_reader(reader)? {
+                Ok(Some(value))
+            } else {
+                Err(KvError::UnexpectedCommandType)
+            }
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Sets the value of a string key to a string.
+    ///
+    /// If the key already exists, the previous value will be overwritten.
+    fn set(&mut self, key: String, value: String) -> Result<()> {
+        let cmd = Command::Set(key, value);
+        let offset = self.current_writer.get_offset();
+        serde_json::to_writer(&mut self.current_writer, &cmd)?;
+        self.current_writer.flush()?;
+        let record = RecordInfo {
+            file_id: self.current_file_id,
+            offset,
+            length: self.current_writer.get_offset() - offset,
+        };
+        if let Command::Set(key, _) = cmd {
+            self.uncompacted += self
+                .index
+                .insert(key, record)
+                .map(|record| record.length)
+                .unwrap_or(0);
+        }
+
+        if self.uncompacted >= COMPACTION_THRESHOLD {
+            self.compact()?;
+        }
+        Ok(())
+    }
+
+    /// Removes a given key.
+    fn remove(&mut self, key: String) -> Result<()> {
+        if self.index.contains_key(&key) {
+            let old_record = self.index.remove(&key).expect("key not found");
+            let cmd = Command::Remove(key);
+            let offset = self.current_writer.get_offset();
+            serde_json::to_writer(&mut self.current_writer, &cmd)?;
+            self.current_writer.flush()?;
+            self.uncompacted += self.current_writer.get_offset() - offset;
+            self.uncompacted += old_record.length;
+
+            if self.uncompacted >= COMPACTION_THRESHOLD {
+                self.compact()?;
+            }
+            Ok(())
+        } else {
+            Err(KvError::KeyNotFound)
+        }
     }
 }
 

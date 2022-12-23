@@ -1,7 +1,9 @@
 //! A simple key/value store.
 
+mod common;
+mod engine;
 mod error;
-mod kv;
 
+pub use common::{Request, Response};
+pub use engine::{KvEngine, KvStore};
 pub use error::{KvError, Result};
-pub use kv::KvStore;
