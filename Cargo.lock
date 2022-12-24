@@ -878,6 +878,7 @@ dependencies = [
  "assert_cmd",
  "clap 4.0.29",
  "criterion",
+ "crossbeam-utils",
  "env_logger",
  "failure",
  "log",

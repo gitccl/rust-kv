@@ -21,6 +21,7 @@ tempfile = "3.3.0"
 walkdir = "2.3.2"
 criterion = {version = "0.4", features = ["html_reports"] }
 rand = "0.8.5"
+crossbeam-utils = "0.8.14"
 
 [[bench]]
 name = "kv_engine_bench"
