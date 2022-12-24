@@ -29,6 +29,23 @@ fn spawn_counter<P: ThreadPool>(pool: P) -> Result<()> {
     Ok(())
 }
 
+fn spawn_panic_task<P: ThreadPool>() -> Result<()> {
+    const TASK_NUM: usize = 1000;
+
+    let pool = P::new(4)?;
+    for _ in 0..TASK_NUM {
+        pool.spawn(move || {
+            // It suppresses flood of panic messages to the console.
+            // You may find it useful to comment this out during development.
+            panic_control::disable_hook_in_current_thread();
+
+            panic!();
+        })
+    }
+
+    spawn_counter(pool)
+}
+
 #[test]
 fn naive_thread_pool_spawn_counter() -> Result<()> {
     let pool = NaiveThreadPool::new(4)?;
@@ -39,4 +56,9 @@ fn naive_thread_pool_spawn_counter() -> Result<()> {
 fn shared_queue_thread_pool_spawn_counter() -> Result<()> {
     let pool = SharedQueueThreadPool::new(4)?;
     spawn_counter(pool)
+}
+
+#[test]
+fn shared_queue_thread_pool_panic_task() -> Result<()> {
+    spawn_panic_task::<SharedQueueThreadPool>()
 }
