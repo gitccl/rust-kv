@@ -1,7 +1,7 @@
 use crate::Result;
 
 /// Trait for a key value storage engine.
-pub trait KvEngine {
+pub trait KvEngine: Clone + Send + 'static {
     /// Sets the value of a string key to a string.
     ///
     /// If the key already exists, the previous value will be overwritten.

@@ -1,16 +1,8 @@
-use std::{
-    env::current_dir,
-    fmt::Display,
-    fs,
-    io::{BufWriter, Write},
-    net::{TcpListener, TcpStream},
-    process::exit,
-};
+use std::{env::current_dir, fmt::Display, fs, process::exit};
 
 use clap::{Parser, ValueEnum};
 use log::{error, info, LevelFilter};
-use rust_kv::{KvEngine, KvStore, Request, Response, Result, SledStore};
-use serde_json::Deserializer;
+use rust_kv::{KvEngine, KvServer, KvStore, Result, SharedQueueThreadPool, SledStore, ThreadPool};
 
 const DEFAULT_LISTENING_ADDRESS: &str = "127.0.0.1:4000";
 const DEFAULT_ENGINE: Engine = Engine::Kvs;
@@ -49,7 +41,7 @@ fn run(engine: Engine, addr: String) -> Result<()> {
 }
 
 fn run_server<E: KvEngine>(kv_engine: E, addr: String) -> Result<()> {
-    let mut server = KvServer::new(kv_engine);
+    let mut server = KvServer::new(kv_engine, SharedQueueThreadPool::new(num_cpus::get())?);
     server.run(addr)
 }
 
@@ -92,61 +84,5 @@ impl Display for Engine {
             Engine::Kvs => write!(f, "kvs"),
             Engine::Sled => write!(f, "sled"),
         }
-    }
-}
-
-/// The server of a key value store.
-struct KvServer<E: KvEngine> {
-    engine: E,
-}
-
-impl<E: KvEngine> KvServer<E> {
-    /// create a `KvServer` with a given storage engine.
-    pub fn new(engine: E) -> KvServer<E> {
-        KvServer { engine }
-    }
-
-    /// Run the server listening on the given address
-    pub fn run(&mut self, addr: String) -> Result<()> {
-        let listener = TcpListener::bind(addr)?;
-        for stream in listener.incoming() {
-            match stream {
-                Ok(stream) => {
-                    if let Err(err) = self.handle_request(stream) {
-                        error!("handle request error: {}", err);
-                    }
-                }
-                Err(err) => error!("connect error: {}", err),
-            };
-        }
-        Ok(())
-    }
-
-    fn handle_request(&mut self, stream: TcpStream) -> Result<()> {
-        let client_addr = stream.peer_addr()?;
-        info!("handle request from {}", client_addr);
-
-        let mut writer = BufWriter::new(&stream);
-        let req_reader = Deserializer::from_reader(&stream).into_iter::<Request>();
-        for request in req_reader {
-            let resp = match request? {
-                Request::Get(key) => match self.engine.get(key) {
-                    Ok(value) => Response::Ok(value),
-                    Err(err) => Response::Err(format!("{}", err)),
-                },
-                Request::Set(key, value) => match self.engine.set(key, value) {
-                    Ok(_) => Response::Ok(None),
-                    Err(err) => Response::Err(format!("{}", err)),
-                },
-                Request::Remove(key) => match self.engine.remove(key) {
-                    Ok(_) => Response::Ok(None),
-                    Err(err) => Response::Err(format!("{}", err)),
-                },
-            };
-
-            serde_json::to_writer(&mut writer, &resp)?;
-            writer.flush()?;
-        }
-        Ok(())
     }
 }

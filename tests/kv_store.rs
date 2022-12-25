@@ -1,3 +1,8 @@
+use std::{
+    sync::{Arc, Barrier},
+    thread,
+};
+
 use rust_kv::{KvEngine, KvStore, Result};
 use tempfile::TempDir;
 use walkdir::WalkDir;
@@ -122,4 +127,126 @@ fn compaction() -> Result<()> {
     }
 
     panic!("No compaction detected");
+}
+
+#[test]
+fn concurrent_set() -> Result<()> {
+    let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+    let mut store = KvStore::open(temp_dir.path())?;
+    let barrier = Arc::new(Barrier::new(1001));
+    for i in 0..1000 {
+        let mut store = store.clone();
+        let barrier = barrier.clone();
+        thread::spawn(move || {
+            store
+                .set(format!("key{}", i), format!("value{}", i))
+                .unwrap();
+            barrier.wait();
+        });
+    }
+    barrier.wait();
+
+    for i in 0..1000 {
+        assert_eq!(store.get(format!("key{}", i))?, Some(format!("value{}", i)));
+    }
+
+    // Open from disk again and check persistent data
+    drop(store);
+    let mut store = KvStore::open(temp_dir.path())?;
+    for i in 0..1000 {
+        assert_eq!(store.get(format!("key{}", i))?, Some(format!("value{}", i)));
+    }
+
+    Ok(())
+}
+
+#[test]
+fn concurrent_get() -> Result<()> {
+    let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+    let mut store = KvStore::open(temp_dir.path())?;
+    for i in 0..100 {
+        store
+            .set(format!("key{}", i), format!("value{}", i))
+            .unwrap();
+    }
+
+    let mut handles = Vec::new();
+    for thread_id in 0..100 {
+        let mut store = store.clone();
+        let handle = thread::spawn(move || {
+            for i in 0..100 {
+                let key_id = (i + thread_id) % 100;
+                assert_eq!(
+                    store.get(format!("key{}", key_id)).unwrap(),
+                    Some(format!("value{}", key_id))
+                );
+            }
+        });
+        handles.push(handle);
+    }
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    // Open from disk again and check persistent data
+    drop(store);
+    let store = KvStore::open(temp_dir.path())?;
+    let mut handles = Vec::new();
+    for thread_id in 0..100 {
+        let mut store = store.clone();
+        let handle = thread::spawn(move || {
+            for i in 0..100 {
+                let key_id = (i + thread_id) % 100;
+                assert_eq!(
+                    store.get(format!("key{}", key_id)).unwrap(),
+                    Some(format!("value{}", key_id))
+                );
+            }
+        });
+        handles.push(handle);
+    }
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    Ok(())
+}
+
+/// 1. change COMPACTION_THRESHOLD to 1024
+/// 2. change for loop i in 0..100000
+#[test]
+fn concurrent_get_set() -> Result<()> {
+    let temp_dir = TempDir::new().expect("unable to create temporary working directory");
+    let mut store = KvStore::open(temp_dir.path())?;
+    for i in 0..100 {
+        store
+            .set(format!("key{}", i), format!("value{}", i))
+            .unwrap();
+    }
+
+    let mut handles = Vec::new();
+    for thread_id in 0..100 {
+        let mut store = store.clone();
+        let handle = thread::spawn(move || {
+            for i in 0..100 {
+                let key_id = (i + thread_id) % 100;
+                if i % 2 == 0 {
+                    store
+                        .set(format!("key{}", key_id), format!("value{}", key_id))
+                        .unwrap();
+                } else {
+                    assert_eq!(
+                        store.get(format!("key{}", key_id)).unwrap(),
+                        Some(format!("value{}", key_id))
+                    );
+                }
+            }
+        });
+        handles.push(handle);
+    }
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    Ok(())
 }

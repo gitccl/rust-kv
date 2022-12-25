@@ -4,6 +4,7 @@ use crate::{KvEngine, KvError, Result};
 use sled::Db;
 
 /// Sled KV storage engine
+#[derive(Clone)]
 pub struct SledStore {
     db: Db,
 }
