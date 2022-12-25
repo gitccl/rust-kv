@@ -1,4 +1,10 @@
-use std::{env::current_dir, fmt::Display, fs, process::exit};
+use std::{
+    env::current_dir,
+    fmt::Display,
+    fs,
+    process::exit,
+    sync::{atomic::AtomicBool, Arc},
+};
 
 use clap::{Parser, ValueEnum};
 use log::{error, info, LevelFilter};
@@ -42,7 +48,7 @@ fn run(engine: Engine, addr: String) -> Result<()> {
 
 fn run_server<E: KvEngine>(kv_engine: E, addr: String) -> Result<()> {
     let mut server = KvServer::new(kv_engine, SharedQueueThreadPool::new(num_cpus::get())?);
-    server.run(addr)
+    server.run(addr, Arc::new(AtomicBool::new(false)))
 }
 
 /// retrieve engine from db dir

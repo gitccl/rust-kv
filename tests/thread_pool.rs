@@ -4,7 +4,7 @@ use std::sync::{
 };
 
 use crossbeam_utils::sync::WaitGroup;
-use rust_kv::{NaiveThreadPool, Result, SharedQueueThreadPool, ThreadPool};
+use rust_kv::{NaiveThreadPool, RayonThreadPool, Result, SharedQueueThreadPool, ThreadPool};
 
 fn spawn_counter<P: ThreadPool>(pool: P) -> Result<()> {
     const TASK_NUM: usize = 20;
@@ -61,4 +61,10 @@ fn shared_queue_thread_pool_spawn_counter() -> Result<()> {
 #[test]
 fn shared_queue_thread_pool_panic_task() -> Result<()> {
     spawn_panic_task::<SharedQueueThreadPool>()
+}
+
+#[test]
+fn rayon_thread_pool_spawn_counter() -> Result<()> {
+    let pool = RayonThreadPool::new(4)?;
+    spawn_counter(pool)
 }

@@ -12,4 +12,4 @@ pub use common::{Request, Response};
 pub use engine::{KvEngine, KvStore, SledStore};
 pub use error::{KvError, Result};
 pub use server::KvServer;
-pub use thread_pool::{NaiveThreadPool, SharedQueueThreadPool, ThreadPool};
+pub use thread_pool::{NaiveThreadPool, RayonThreadPool, SharedQueueThreadPool, ThreadPool};

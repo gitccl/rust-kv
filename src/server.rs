@@ -1,6 +1,10 @@
 use std::{
     io::{BufWriter, Write},
     net::{TcpListener, TcpStream},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
 
 use crate::{KvEngine, Request, Response, Result, ThreadPool};
@@ -20,9 +24,12 @@ impl<E: KvEngine, T: ThreadPool> KvServer<E, T> {
     }
 
     /// Run the server listening on the given address
-    pub fn run(&mut self, addr: String) -> Result<()> {
+    pub fn run(&mut self, addr: String, is_stop: Arc<AtomicBool>) -> Result<()> {
         let listener = TcpListener::bind(addr)?;
         for stream in listener.incoming() {
+            if is_stop.load(Ordering::SeqCst) {
+                break;
+            }
             let engine = self.engine.clone();
             self.pool.spawn(move || {
                 match stream {

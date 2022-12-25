@@ -1,6 +1,7 @@
 use crate::Result;
 
 mod naive;
+mod rayon;
 mod shared_queue;
 
 /// The trait that all thread pools should implement.
@@ -17,5 +18,6 @@ pub trait ThreadPool {
         F: FnOnce() + Send + 'static;
 }
 
+pub use self::rayon::RayonThreadPool;
 pub use naive::NaiveThreadPool;
 pub use shared_queue::SharedQueueThreadPool;
