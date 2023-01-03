@@ -2,6 +2,7 @@ use std::thread;
 
 use crate::{Result, ThreadPool};
 
+#[derive(Clone)]
 pub struct NaiveThreadPool;
 
 impl ThreadPool for NaiveThreadPool {

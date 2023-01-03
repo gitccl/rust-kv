@@ -1,7 +1,10 @@
+use std::sync::Arc;
+
 use crate::ThreadPool;
 
+#[derive(Clone)]
 pub struct RayonThreadPool {
-    pool: rayon::ThreadPool,
+    pool: Arc<rayon::ThreadPool>,
 }
 
 impl ThreadPool for RayonThreadPool {
@@ -9,10 +12,11 @@ impl ThreadPool for RayonThreadPool {
     where
         Self: Sized,
     {
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(threads_num)
+            .build()?;
         Ok(RayonThreadPool {
-            pool: rayon::ThreadPoolBuilder::new()
-                .num_threads(threads_num)
-                .build()?,
+            pool: Arc::new(pool),
         })
     }
 

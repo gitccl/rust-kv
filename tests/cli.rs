@@ -1,133 +1,11 @@
 use assert_cmd::prelude::*;
-use predicates::str::{contains, is_empty};
+use predicates::str::contains;
 use std::fs::{self, File};
 use std::process::Command;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
 use tempfile::TempDir;
-
-// `kv-client` with no args should exit with a non-zero code.
-#[test]
-fn client_cli_no_args() {
-    let temp_dir = TempDir::new().unwrap();
-    let mut cmd = Command::cargo_bin("kv-client").unwrap();
-    cmd.current_dir(&temp_dir).assert().failure();
-}
-
-#[test]
-fn client_cli_invalid_get() {
-    let temp_dir = TempDir::new().unwrap();
-    Command::cargo_bin("kv-client")
-        .unwrap()
-        .args(&["get"])
-        .current_dir(&temp_dir)
-        .assert()
-        .failure();
-
-    Command::cargo_bin("kv-client")
-        .unwrap()
-        .args(&["get", "extra", "field"])
-        .current_dir(&temp_dir)
-        .assert()
-        .failure();
-
-    Command::cargo_bin("kv-client")
-        .unwrap()
-        .args(&["get", "key", "--addr", "invalid-addr"])
-        .current_dir(&temp_dir)
-        .assert()
-        .failure();
-
-    Command::cargo_bin("kv-client")
-        .unwrap()
-        .args(&["get", "key", "--unknown-flag"])
-        .current_dir(&temp_dir)
-        .assert()
-        .failure();
-}
-
-#[test]
-fn client_cli_invalid_set() {
-    let temp_dir = TempDir::new().unwrap();
-    Command::cargo_bin("kv-client")
-        .unwrap()
-        .args(&["set"])
-        .current_dir(&temp_dir)
-        .assert()
-        .failure();
-
-    Command::cargo_bin("kv-client")
-        .unwrap()
-        .args(&["set", "missing_field"])
-        .current_dir(&temp_dir)
-        .assert()
-        .failure();
-
-    Command::cargo_bin("kv-client")
-        .unwrap()
-        .args(&["set", "key", "value", "extra_field"])
-        .current_dir(&temp_dir)
-        .assert()
-        .failure();
-
-    Command::cargo_bin("kv-client")
-        .unwrap()
-        .args(&["set", "key", "value", "--addr", "invalid-addr"])
-        .current_dir(&temp_dir)
-        .assert()
-        .failure();
-
-    Command::cargo_bin("kv-client")
-        .unwrap()
-        .args(&["get", "key", "--unknown-flag"])
-        .current_dir(&temp_dir)
-        .assert()
-        .failure();
-}
-
-#[test]
-fn client_cli_invalid_rm() {
-    let temp_dir = TempDir::new().unwrap();
-    Command::cargo_bin("kv-client")
-        .unwrap()
-        .args(&["rm"])
-        .current_dir(&temp_dir)
-        .assert()
-        .failure();
-
-    Command::cargo_bin("kv-client")
-        .unwrap()
-        .args(&["rm", "extra", "field"])
-        .current_dir(&temp_dir)
-        .assert()
-        .failure();
-
-    Command::cargo_bin("kv-client")
-        .unwrap()
-        .args(&["rm", "key", "--addr", "invalid-addr"])
-        .current_dir(&temp_dir)
-        .assert()
-        .failure();
-
-    Command::cargo_bin("kv-client")
-        .unwrap()
-        .args(&["rm", "key", "--unknown-flag"])
-        .current_dir(&temp_dir)
-        .assert()
-        .failure();
-}
-
-#[test]
-fn client_cli_invalid_subcommand() {
-    let temp_dir = TempDir::new().unwrap();
-    Command::cargo_bin("kv-client")
-        .unwrap()
-        .args(&["unknown"])
-        .current_dir(&temp_dir)
-        .assert()
-        .failure();
-}
 
 #[test]
 fn cli_log_configuration() {
@@ -203,71 +81,80 @@ fn cli_access_server(engine: &str, addr: &str) {
         let _ = receiver.recv(); // wait for main thread to finish
         child.kill().expect("server exited before killed");
     });
+
     thread::sleep(Duration::from_secs(1));
 
-    Command::cargo_bin("kv-client")
+    assert_cmd::Command::cargo_bin("kv-client")
         .unwrap()
-        .args(&["set", "key1", "value1", "--addr", addr])
+        .args(&["--addr", addr])
         .current_dir(&temp_dir)
+        .write_stdin("set key1 value1")
         .assert()
         .success()
-        .stdout(is_empty());
+        .stdout(contains("Ok"));
 
-    Command::cargo_bin("kv-client")
+    assert_cmd::Command::cargo_bin("kv-client")
         .unwrap()
-        .args(&["get", "key1", "--addr", addr])
+        .args(&["--addr", addr])
         .current_dir(&temp_dir)
+        .write_stdin("get key1")
         .assert()
         .success()
-        .stdout("value1\n");
+        .stdout(contains("value1"));
 
-    Command::cargo_bin("kv-client")
+    assert_cmd::Command::cargo_bin("kv-client")
         .unwrap()
-        .args(&["set", "key1", "value2", "--addr", addr])
+        .args(&["--addr", addr])
         .current_dir(&temp_dir)
+        .write_stdin("set key1 value2")
         .assert()
         .success()
-        .stdout(is_empty());
+        .stdout(contains("Ok"));
 
-    Command::cargo_bin("kv-client")
+    assert_cmd::Command::cargo_bin("kv-client")
         .unwrap()
-        .args(&["get", "key1", "--addr", addr])
+        .args(&["--addr", addr])
         .current_dir(&temp_dir)
+        .write_stdin("get key1")
         .assert()
         .success()
-        .stdout("value2\n");
+        .stdout(contains("value2"));
 
-    Command::cargo_bin("kv-client")
+    assert_cmd::Command::cargo_bin("kv-client")
         .unwrap()
-        .args(&["get", "key2", "--addr", addr])
+        .args(&["--addr", addr])
         .current_dir(&temp_dir)
+        .write_stdin("get key2")
         .assert()
         .success()
         .stdout(contains("Key not found"));
 
-    Command::cargo_bin("kv-client")
+    assert_cmd::Command::cargo_bin("kv-client")
         .unwrap()
-        .args(&["rm", "key2", "--addr", addr])
+        .args(&["--addr", addr])
         .current_dir(&temp_dir)
-        .assert()
-        .failure()
-        .stderr(contains("Key not found"));
-
-    Command::cargo_bin("kv-client")
-        .unwrap()
-        .args(&["set", "key2", "value3", "--addr", addr])
-        .current_dir(&temp_dir)
+        .write_stdin("rm key2")
         .assert()
         .success()
-        .stdout(is_empty());
+        .stdout(contains("Key not found"));
 
-    Command::cargo_bin("kv-client")
+    assert_cmd::Command::cargo_bin("kv-client")
         .unwrap()
-        .args(&["rm", "key1", "--addr", addr])
+        .args(&["--addr", addr])
         .current_dir(&temp_dir)
+        .write_stdin("set key2 value3")
         .assert()
         .success()
-        .stdout(is_empty());
+        .stdout(contains("Ok"));
+
+    assert_cmd::Command::cargo_bin("kv-client")
+        .unwrap()
+        .args(&["--addr", addr])
+        .current_dir(&temp_dir)
+        .write_stdin("rm key1")
+        .assert()
+        .success()
+        .stdout(contains("Ok"));
 
     sender.send(()).unwrap();
     handle.join().unwrap();
@@ -286,17 +173,19 @@ fn cli_access_server(engine: &str, addr: &str) {
     });
     thread::sleep(Duration::from_secs(1));
 
-    Command::cargo_bin("kv-client")
+    assert_cmd::Command::cargo_bin("kv-client")
         .unwrap()
-        .args(&["get", "key2", "--addr", addr])
+        .args(&["--addr", addr])
         .current_dir(&temp_dir)
+        .write_stdin("get key2")
         .assert()
         .success()
         .stdout(contains("value3"));
-    Command::cargo_bin("kv-client")
+    assert_cmd::Command::cargo_bin("kv-client")
         .unwrap()
-        .args(&["get", "key1", "--addr", addr])
+        .args(&["--addr", addr])
         .current_dir(&temp_dir)
+        .write_stdin("get key1")
         .assert()
         .success()
         .stdout(contains("Key not found"));

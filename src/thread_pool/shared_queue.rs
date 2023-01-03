@@ -1,5 +1,5 @@
 use crate::{Result, ThreadPool};
-use log::{info, warn};
+use log::warn;
 use std::{
     panic::{self, AssertUnwindSafe},
     sync::{
@@ -43,6 +43,15 @@ impl ThreadPool for SharedQueueThreadPool {
     }
 }
 
+impl Clone for SharedQueueThreadPool {
+    fn clone(&self) -> Self {
+        Self {
+            workers: Vec::new(),
+            sender: self.sender.clone(),
+        }
+    }
+}
+
 impl Drop for SharedQueueThreadPool {
     fn drop(&mut self) {
         for _ in &self.workers {
@@ -54,8 +63,6 @@ impl Drop for SharedQueueThreadPool {
                 handle.join().unwrap();
             }
         }
-
-        info!("thread pool exited");
     }
 }
 

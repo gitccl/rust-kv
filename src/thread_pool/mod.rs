@@ -5,7 +5,7 @@ mod rayon;
 mod shared_queue;
 
 /// The trait that all thread pools should implement.
-pub trait ThreadPool {
+pub trait ThreadPool: Clone + Send + 'static {
     /// Creates a new thread pool, immediately spawning the specified number of threads.
     fn new(threads_num: usize) -> Result<Self>
     where
