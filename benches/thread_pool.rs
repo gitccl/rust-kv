@@ -1,4 +1,5 @@
 use std::{
+    net::TcpStream,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Once,
@@ -55,14 +56,17 @@ fn write_queued_kvstore(c: &mut Criterion) {
                         let value = values.clone();
                         let wg = wg.clone();
                         client_pool.spawn(move || {
-                            match KvClient::new(&addr.to_owned()) {
-                                Ok(mut client) => {
-                                    client.set(key, value).expect("client set error");
+                            let rt = tokio::runtime::Runtime::new().unwrap();
+                            rt.block_on(async move {
+                                match KvClient::new(addr.to_owned()).await {
+                                    Ok(mut client) => {
+                                        client.set(key, value).await.expect("client set error");
+                                    }
+                                    Err(err) => {
+                                        warn!("failed to new kv client: {}", err);
+                                    }
                                 }
-                                Err(err) => {
-                                    warn!("failed to new kv client: {}", err);
-                                }
-                            }
+                            });
                             drop(wg);
                         });
                     }
@@ -73,7 +77,7 @@ fn write_queued_kvstore(c: &mut Criterion) {
                 is_stop.store(true, Ordering::SeqCst);
 
                 // trigger server stop
-                let _ = KvClient::new(&addr.to_owned());
+                let _ = TcpStream::connect(addr).unwrap();
 
                 child_handle.join().expect("child thread err");
             },
@@ -113,10 +117,13 @@ fn read_queued_kvstore(c: &mut Criterion) {
 
                 thread::sleep(Duration::from_secs(1));
 
-                for i in 0..ENTRY_COUNT {
-                    let mut client = KvClient::new(&addr.to_owned()).unwrap();
-                    client.set(keys[i].clone(), values.clone()).unwrap();
-                }
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async {
+                    let mut client = KvClient::new(addr.to_owned()).await.unwrap();
+                    for i in 0..ENTRY_COUNT {
+                        client.set(keys[i].clone(), values.clone()).await.unwrap();
+                    }
+                });
 
                 b.iter(|| {
                     let wg = WaitGroup::new();
@@ -124,14 +131,17 @@ fn read_queued_kvstore(c: &mut Criterion) {
                         let key = keys[i].clone();
                         let wg = wg.clone();
                         client_pool.spawn(move || {
-                            match KvClient::new(&addr.to_owned()) {
-                                Ok(mut client) => {
-                                    client.get(key).expect("client get error");
+                            let rt = tokio::runtime::Runtime::new().unwrap();
+                            rt.block_on(async move {
+                                match KvClient::new(addr.to_owned()).await {
+                                    Ok(mut client) => {
+                                        client.get(key).await.expect("client get error");
+                                    }
+                                    Err(err) => {
+                                        warn!("failed to new kv client: {}", err);
+                                    }
                                 }
-                                Err(err) => {
-                                    warn!("failed to new kv client: {}", err);
-                                }
-                            }
+                            });
                             drop(wg);
                         });
                     }
@@ -142,7 +152,7 @@ fn read_queued_kvstore(c: &mut Criterion) {
                 is_stop.store(true, Ordering::SeqCst);
 
                 // trigger server stop
-                let _ = KvClient::new(&addr.to_owned());
+                let _ = TcpStream::connect(addr).unwrap();
 
                 child_handle.join().expect("child thread err");
             },
@@ -188,14 +198,17 @@ fn write_rayon_kvstore(c: &mut Criterion) {
                         let value = values.clone();
                         let wg = wg.clone();
                         client_pool.spawn(move || {
-                            match KvClient::new(&addr.to_owned()) {
-                                Ok(mut client) => {
-                                    client.set(key, value).expect("client set error");
+                            let rt = tokio::runtime::Runtime::new().unwrap();
+                            rt.block_on(async move {
+                                match KvClient::new(addr.to_owned()).await {
+                                    Ok(mut client) => {
+                                        client.set(key, value).await.expect("client set error");
+                                    }
+                                    Err(err) => {
+                                        warn!("failed to new kv client: {}", err);
+                                    }
                                 }
-                                Err(err) => {
-                                    warn!("failed to new kv client: {}", err);
-                                }
-                            }
+                            });
                             drop(wg);
                         });
                     }
@@ -206,7 +219,7 @@ fn write_rayon_kvstore(c: &mut Criterion) {
                 is_stop.store(true, Ordering::SeqCst);
 
                 // trigger server stop
-                let _ = KvClient::new(&addr.to_owned());
+                let _ = TcpStream::connect(addr).unwrap();
 
                 child_handle.join().expect("child thread err");
             },
@@ -243,13 +256,16 @@ fn read_rayon_kvstore(c: &mut Criterion) {
                 let values = String::from("value");
                 let keys: Vec<String> = (0..ENTRY_COUNT).map(|i| format!("key{}", i)).collect();
                 let client_pool = RayonThreadPool::new(ENTRY_COUNT).unwrap();
-                
+
                 thread::sleep(Duration::from_secs(1));
-                
-                for i in 0..ENTRY_COUNT {
-                    let mut client = KvClient::new(&addr.to_owned()).unwrap();
-                    client.set(keys[i].clone(), values.clone()).unwrap();
-                }
+
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async {
+                    let mut client = KvClient::new(addr.to_owned()).await.unwrap();
+                    for i in 0..ENTRY_COUNT {
+                        client.set(keys[i].clone(), values.clone()).await.unwrap();
+                    }
+                });
 
                 b.iter(|| {
                     let wg = WaitGroup::new();
@@ -257,14 +273,17 @@ fn read_rayon_kvstore(c: &mut Criterion) {
                         let key = keys[i].clone();
                         let wg = wg.clone();
                         client_pool.spawn(move || {
-                            match KvClient::new(&addr.to_owned()) {
-                                Ok(mut client) => {
-                                    client.get(key).expect("client get error");
+                            let rt = tokio::runtime::Runtime::new().unwrap();
+                            rt.block_on(async move {
+                                match KvClient::new(addr.to_owned()).await {
+                                    Ok(mut client) => {
+                                        client.get(key).await.expect("client get error");
+                                    }
+                                    Err(err) => {
+                                        warn!("failed to new kv client: {}", err);
+                                    }
                                 }
-                                Err(err) => {
-                                    warn!("failed to new kv client: {}", err);
-                                }
-                            }
+                            });
                             drop(wg);
                         });
                     }
@@ -275,7 +294,7 @@ fn read_rayon_kvstore(c: &mut Criterion) {
                 is_stop.store(true, Ordering::SeqCst);
 
                 // trigger server stop
-                let _ = KvClient::new(&addr.to_owned());
+                let _ = TcpStream::connect(addr).unwrap();
 
                 child_handle.join().expect("child thread err");
             },
@@ -321,14 +340,17 @@ fn write_rayon_sledstore(c: &mut Criterion) {
                         let value = values.clone();
                         let wg = wg.clone();
                         client_pool.spawn(move || {
-                            match KvClient::new(&addr.to_owned()) {
-                                Ok(mut client) => {
-                                    client.set(key, value).expect("client set error");
+                            let rt = tokio::runtime::Runtime::new().unwrap();
+                            rt.block_on(async move {
+                                match KvClient::new(addr.to_owned()).await {
+                                    Ok(mut client) => {
+                                        client.set(key, value).await.expect("client set error");
+                                    }
+                                    Err(err) => {
+                                        warn!("failed to new kv client: {}", err);
+                                    }
                                 }
-                                Err(err) => {
-                                    warn!("failed to new kv client: {}", err);
-                                }
-                            }
+                            });
                             drop(wg);
                         });
                     }
@@ -339,7 +361,7 @@ fn write_rayon_sledstore(c: &mut Criterion) {
                 is_stop.store(true, Ordering::SeqCst);
 
                 // trigger server stop
-                let _ = KvClient::new(&addr.to_owned());
+                let _ = TcpStream::connect(addr).unwrap();
 
                 child_handle.join().expect("child thread err");
             },
@@ -379,10 +401,13 @@ fn read_rayon_sledstore(c: &mut Criterion) {
 
                 thread::sleep(Duration::from_secs(1));
 
-                for i in 0..ENTRY_COUNT {
-                    let mut client = KvClient::new(&addr.to_owned()).unwrap();
-                    client.set(keys[i].clone(), values.clone()).unwrap();
-                }
+                let rt = tokio::runtime::Runtime::new().unwrap();
+                rt.block_on(async {
+                    let mut client = KvClient::new(addr.to_owned()).await.unwrap();
+                    for i in 0..ENTRY_COUNT {
+                        client.set(keys[i].clone(), values.clone()).await.unwrap();
+                    }
+                });
 
                 b.iter(|| {
                     let wg = WaitGroup::new();
@@ -390,14 +415,17 @@ fn read_rayon_sledstore(c: &mut Criterion) {
                         let key = keys[i].clone();
                         let wg = wg.clone();
                         client_pool.spawn(move || {
-                            match KvClient::new(&addr.to_owned()) {
-                                Ok(mut client) => {
-                                    client.get(key).expect("client get error");
+                            let rt = tokio::runtime::Runtime::new().unwrap();
+                            rt.block_on(async move {
+                                match KvClient::new(addr.to_owned()).await {
+                                    Ok(mut client) => {
+                                        client.get(key).await.expect("client get error");
+                                    }
+                                    Err(err) => {
+                                        warn!("failed to new kv client: {}", err);
+                                    }
                                 }
-                                Err(err) => {
-                                    warn!("failed to new kv client: {}", err);
-                                }
-                            }
+                            });
                             drop(wg);
                         });
                     }
@@ -408,7 +436,7 @@ fn read_rayon_sledstore(c: &mut Criterion) {
                 is_stop.store(true, Ordering::SeqCst);
 
                 // trigger server stop
-                let _ = KvClient::new(&addr.to_owned());
+                let _ = TcpStream::connect(addr).unwrap();
 
                 child_handle.join().expect("child thread err");
             },
@@ -420,7 +448,7 @@ fn read_rayon_sledstore(c: &mut Criterion) {
 
 criterion_group! {
     name = benches;
-    config = Criterion::default().sample_size(20);
+    config = Criterion::default().sample_size(10);
     targets = write_queued_kvstore, read_queued_kvstore, write_rayon_kvstore,
                 read_rayon_kvstore, write_rayon_sledstore, read_rayon_sledstore
 }

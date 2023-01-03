@@ -4,13 +4,15 @@ use std::sync::{
 };
 
 use crate::{KvEngine, KvError, Request, Response, Result, ThreadPool};
+use futures_util::{SinkExt, TryStreamExt};
 use log::{error, info};
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
     select, signal,
     sync::oneshot,
 };
+use tokio_serde::{formats::SymmetricalJson, SymmetricallyFramed};
+use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 /// The server of a key value store.
 pub struct KvServer<E: KvEngine, T: ThreadPool> {
@@ -63,20 +65,33 @@ impl<E: KvEngine, T: ThreadPool> KvServer<E, T> {
 
 async fn handle_request<E: KvEngine, T: ThreadPool>(
     engine: E,
-    mut stream: TcpStream,
+    stream: TcpStream,
     pool: T,
 ) -> Result<()> {
     let client_addr = stream.peer_addr()?;
     info!("handle request from {}", client_addr);
 
+    let (read_half, write_half) = stream.into_split();
+    let frame_reader = FramedRead::new(read_half, LengthDelimitedCodec::new());
+    let frame_writer = FramedWrite::new(write_half, LengthDelimitedCodec::new());
+
+    let mut req_reader = SymmetricallyFramed::<_, Request, _>::new(
+        frame_reader,
+        SymmetricalJson::<Request>::default(),
+    );
+    let mut resp_writer = SymmetricallyFramed::<_, Response, _>::new(
+        frame_writer,
+        SymmetricalJson::<Response>::default(),
+    );
+
     loop {
-        let mut buf = Vec::new();
-        let n = stream.read_buf(&mut buf).await?;
-        if n == 0 {
-            info!("client {} closed", client_addr);
-            break;
-        }
-        let request: Request = serde_json::from_slice(&buf[..n])?;
+        let request = match req_reader.try_next().await? {
+            Some(req) => req,
+            None => {
+                info!("client {} closed", client_addr);
+                break;
+            }
+        };
 
         let (tx, rx) = oneshot::channel();
 
@@ -104,8 +119,7 @@ async fn handle_request<E: KvEngine, T: ThreadPool>(
         let resp = rx
             .await
             .map_err(|e| KvError::StringError(format!("{}", e)))?;
-        let data = serde_json::to_vec(&resp)?;
-        stream.write_all(&data).await?;
+        resp_writer.send(resp).await?;
     }
 
     Ok(())
